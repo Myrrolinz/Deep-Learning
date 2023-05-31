@@ -4,7 +4,6 @@ import torchvision.transforms as transforms
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -55,18 +54,31 @@ def train():
                 print(f'[{epoch + 1}, {i + 1:5d}] loss: {running_loss / 2000:.3f}')
                 running_loss = 0.0
 
-    print('Finished Training')
-    PATH = './cifar_net.pth'
-    torch.save(net.state_dict(), PATH)
 
+def validate(accv, lossv):
+    # dataiter = iter(testloader)
+    # images, labels = next(dataiter)
 
-def validate():
-    dataiter = iter(testloader)
-    images, labels = next(dataiter)
-
-    # print images
-    imshow(torchvision.utils.make_grid(images))
-    print('GroundTruth: ', ' '.join(f'{classes[labels[j]]:5s}' for j in range(4)))
+    # # print images
+    # imshow(torchvision.utils.make_grid(images))
+    # print('GroundTruth: ', ' '.join(f'{classes[labels[j]]:5s}' for j in range(4)))
+    correct = 0
+    total = 0 
+    val_loss = 0  
+    for data in testloader:
+        images, labels = data
+        # calculate outputs by running images through the network
+        outputs = net(images)
+        # the class with the highest energy is what we choose as prediction
+        _, predicted = torch.max(outputs.data, 1)
+        total += labels.size(0)
+        correct += (predicted == labels).sum().item()
+        val_loss += criterion(outputs, labels).data.item()
+    val_loss /= len(testloader)
+    accv.append(100 * correct / total)
+    lossv.append(val_loss)
+    print(f'Accuracy of the network on the 10000 test images: {100 * correct // total} %')
+    print(f'Validation loss: {val_loss:.3f}')
 
 
 if __name__ == '__main__':
@@ -117,11 +129,18 @@ if __name__ == '__main__':
     net = Net()
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9)
+    accv = []
+    lossv = []
+    epochs = 50
+    for epoch in range(epochs+1):
+        train()
+        validate(accv, lossv)
 
-    # train()
-    # validate()
-
-    net.load_state_dict(torch.load("./cifar_net.pth"))
+    print('Finished Training')
+    PATH = './Log/CNN.pth'
+    torch.save(net.state_dict(), PATH)
+    
+    net.load_state_dict(torch.load("./Log/CNN.pth"))
     outputs = net(images)
     _, predicted = torch.max(outputs, 1)
     print('Predicted: ', ' '.join(f'{classes[predicted[j]]:5s}' for j in range(4)))
