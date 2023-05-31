@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from torchvision import datasets, transforms  # 封装了很多数据集，针对图像进行操作（包括变换、采点、旋转、加噪音等操作）
+from torchvision import datasets, transforms  # 针对图像进行操作（包括变换、采点、旋转、加噪音等操作）
 import torch.nn.functional as F
 import numpy as np
 import matplotlib.pyplot as plt
@@ -15,9 +15,9 @@ class Net(nn.Module):
         初始化网络结构
         """
         super(Net, self).__init__()
-        self.fc1 = nn.Linear(28 * 28, 50)  # 全连接层，图片像素是28 * 28, 所以输入也是28 * 28, 防止计算量太大映射到50，weight [28 * 28, 50] bais[50, ]
-        self.fc1_drop = nn.Dropout(0.2)  # 防止过拟合，在训练时随机以一定的概率丢掉一些数据，丢掉20%的数据（可以加激活函数）
-        self.fc2 = nn.Linear(50, 50)  # 全连接层
+        self.fc1 = nn.Linear(28 * 28, 100)  # 全连接层，图片像素是28 * 28, 所以输入也是28 * 28
+        self.fc1_drop = nn.Dropout(0.2)  # 防止过拟合，在训练时随机以20%概率丢掉一些数据
+        self.fc2 = nn.Linear(50, 80)  # 全连接层
         self.fc2_drop = nn.Dropout(0.2)
         self.fc3 = nn.Linear(50, 10)  # 最后有十个类型（1-10），所以将最终的结果映射到10个维度上
 
@@ -28,16 +28,16 @@ class Net(nn.Module):
         :return: 训练出来的每张图片对应的每个类别的概率
         """
         x = x.view(-1, 28 * 28)  # 改变tensor的形状，删除多余的维度 [32, 28 * 28]
-        x = F.relu(self.fc1(x))  # 利用Relu激活函数实现激活层，将张量x的输入调用第一层通过一个Relu激活层
+        x = F.relu(self.fc1(x))  # 利用Relu激活函数实现激活层
         x = self.fc1_drop(x)  # 一般是将dropout放在激活函数后
         x = F.relu(self.fc2(x))
         x = self.fc2_drop(x)  # [32, 10] 32张图片，每张图片对应的每个类别的概率
-        return F.log_softmax(self.fc3(x), dim=1)  # log_softmax_log(p), dim = 1是每张图片对第一个维度做softmax
+        return F.log_softmax(self.fc3(x), dim = 1)  # log_softmax_log(p), dim = 1是每张图片对第一个维度做softmax
 
 class Net1(nn.Module):
     def __init__(self):
         super(Net1, self).__init__()
-        self.fc1 = nn.Linear(28*28, 400)  # weight: [28*28, 50]   bias: [50, ]
+        self.fc1 = nn.Linear(28*28, 400)
         self.fc1_drop = nn.Dropout(0.2)
         self.fc2 = nn.Linear(400, 80)
         self.fc2_drop = nn.Dropout(0.2)
@@ -158,9 +158,7 @@ if __name__ == "__main__":
     criterion = nn.CrossEntropyLoss()  # 定义评价标准，交叉商函数
 
     epochs = 10
-
     lossv, accv = [], []
-
     for epoch in range(1, epochs + 1):
         train(epoch)
         validate(lossv, accv)
