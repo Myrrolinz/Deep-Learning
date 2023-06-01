@@ -133,7 +133,7 @@ def densenet_BC_cifar(depth, k, **kwargs):
 
 # 直接设置好默认的分类类别有10类
 # net = DenseNet().to(device)
-net = densenet_BC_cifar(190, 40, num_classes=100)
+net = densenet_BC_cifar(190, 40, num_classes=100).to(device)
 with open('Log/DenseNet.txt', 'w') as f:
     f.write(str(net))
 criterion = nn.CrossEntropyLoss()
@@ -209,10 +209,12 @@ if __name__ == '__main__':
     plt.figure(figsize=(5, 3))
     plt.plot(np.arange(1, epochs + 1), lossv)
     plt.title('validation loss')
+    plt.savefig('./Log/DenseNet_loss.png')
 
     plt.figure(figsize=(5, 3))
     plt.plot(np.arange(1, epochs + 1), accv)
     plt.title('validation accuracy')
+    plt.savefig('./Log/DenseNet_accuracy.png')
 
     PATH = './Log/DenseNet.pth'
     torch.save(net.state_dict(), PATH)

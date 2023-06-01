@@ -176,7 +176,7 @@ if __name__ == '__main__':
     print('Using PyTorch version:', torch.__version__, ' Device:', device)
     print(net)
 
-    epochs = 10
+    epochs = 25
     lossv, accv = [], []
     # print("hello")
     for epoch in range(1, epochs + 1):
@@ -187,10 +187,12 @@ if __name__ == '__main__':
     plt.figure(figsize=(5, 3))
     plt.plot(np.arange(1, epochs + 1), lossv)
     plt.title('validation loss')
+    plt.savefig('./Log/ResNet_loss.png')
 
     plt.figure(figsize=(5, 3))
     plt.plot(np.arange(1, epochs + 1), accv)
     plt.title('validation accuracy')
+    plt.savefig('./Log/ResNet_acc.png')
 
     PATH = './Log/ResNet.pth'
     torch.save(net.state_dict(), PATH)

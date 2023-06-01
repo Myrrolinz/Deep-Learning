@@ -6,7 +6,15 @@ import torch.nn.functional as F
 import torch.optim as optim
 import matplotlib.pyplot as plt
 import numpy as np
+import random
 
+seed = 42
+random.seed(seed)
+torch.manual_seed(seed)
+if torch.cuda.is_available():
+    device = torch.device('cuda')
+else:
+    device = torch.device('cpu')
 
 class Net(nn.Module):
     def __init__(self):
@@ -38,6 +46,8 @@ def train():
         for i, data in enumerate(trainloader, 0):
             # get the inputs; data is a list of [inputs, labels]
             inputs, labels = data
+            inputs = inputs.to(device)
+            labels = labels.to(device)
 
             # zero the parameter gradients
             optimizer.zero_grad()
@@ -67,6 +77,8 @@ def validate(accv, lossv):
     val_loss = 0  
     for data in testloader:
         images, labels = data
+        images = images.to(device)
+        labels = labels.to(device)
         # calculate outputs by running images through the network
         outputs = net(images)
         # the class with the highest energy is what we choose as prediction
@@ -88,7 +100,7 @@ if __name__ == '__main__':
 
     trainset = torchvision.datasets.CIFAR10(root='./data',
                                             train=True,
-                                            download=True,
+                                            download=False,
                                             transform=transform)
 
     trainloader = torch.utils.data.DataLoader(trainset,
@@ -98,7 +110,7 @@ if __name__ == '__main__':
 
     testset = torchvision.datasets.CIFAR10(root='./data',
                                            train=False,
-                                           download=True,
+                                           download=False,
                                            transform=transform)
 
     testloader = torch.utils.data.DataLoader(testset,
@@ -126,12 +138,12 @@ if __name__ == '__main__':
     # print labels
     # print(' '.join(f'{classes[labels[j]]:5s}' for j in range(batch_size)))
 
-    net = Net()
+    net = Net().to(device)
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9)
     accv = []
     lossv = []
-    epochs = 50
+    epochs = 10
     for epoch in range(epochs+1):
         train()
         validate(accv, lossv)
@@ -139,6 +151,15 @@ if __name__ == '__main__':
     print('Finished Training')
     PATH = './Log/CNN.pth'
     torch.save(net.state_dict(), PATH)
+    
+    plt.figure(figsize=(5,3))
+    plt.plot(np.arange(1,epochs+1), lossv)
+    plt.title('validation loss')
+
+    plt.figure(figsize=(5,3))
+    plt.plot(np.arange(1,epochs+1), accv)
+    plt.title('validation accuracy')
+    
     
     net.load_state_dict(torch.load("./Log/CNN.pth"))
     outputs = net(images)
