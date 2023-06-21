@@ -36,6 +36,8 @@ class RNN(nn.Module):
     def initHidden(self):
         return torch.zeros(1, self.hidden_size)
 
+n_hidden = 128
+
 
 
 class LSTM(nn.Module):
@@ -144,21 +146,21 @@ def randomTrainingExample():
     return category, line, category_tensor, line_tensor
 
 def train(args, category_tensor, line_tensor):
-    # hidden = rnn.initHidden()
-    #
-    # rnn.zero_grad()
-    # print(line_tensor.shape)
-    # for i in range(line_tensor.size()[0]):
-    #     output, hidden = rnn(line_tensor[i], hidden)
-    optimizer.zero_grad()
-    output = rnn(line_tensor)
+    hidden = rnn.initHidden()
+    
+    rnn.zero_grad()
+    print(line_tensor.shape)
+    for i in range(line_tensor.size()[0]):
+        output, hidden = rnn(line_tensor[i], hidden)
+    # optimizer.zero_grad()
+    # output = rnn(line_tensor)
     loss = criterion(output, category_tensor)
     loss.backward()
-    optimizer.step()
+    # optimizer.step()
 
     # Add parameters' gradients to their values, multiplied by learning rate
-    # for p in rnn.parameters():
-    #     p.data.add_(p.grad.data, alpha=-args.learning_rate)
+    for p in rnn.parameters():
+        p.data.add_(p.grad.data, alpha=-args.learning_rate)
 
     return output, loss.item()
 
@@ -216,8 +218,8 @@ if __name__ == '__main__':
 
     criterion = nn.NLLLoss()
 
-    # rnn = RNN(n_letters, args.hidden, n_categories)
-    rnn = LSTM(n_letters, args.hidden, n_categories)#.to(args.device)
+    rnn = RNN(n_letters, args.hidden, n_categories)
+    # rnn = LSTM(n_letters, args.hidden, n_categories)#.to(args.device)
     optimizer = torch.optim.SGD(rnn.parameters(), lr=args.learning_rate)
 
     current_loss = 0

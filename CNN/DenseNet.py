@@ -21,118 +21,117 @@ else:
     device = torch.device('cpu')
 
 
-# DenseNet之中的Dense结构，每一个DenseBlock之中可能有几个DenseLayer
-# 加入了dropout层训练时防止过拟合
 class Bottleneck(nn.Module):
-    def __init__(self, nChannels, growthRate):
+    """
+    Dense Block
+    这里的growth_rate=out_channels, 就是每个Block自己输出的通道数。
+    先通过1x1卷积层，将通道数缩小为4 * growth_rate，然后再通过3x3卷积层降低到growth_rate。
+    """
+    expansion = 4
+    
+    def __init__(self, in_channels, growth_rate):
         super(Bottleneck, self).__init__()
-        interChannels = 4*growthRate
-        self.bn1 = nn.BatchNorm2d(nChannels)
-        self.conv1 = nn.Conv2d(nChannels, interChannels, kernel_size=1,
-                               bias=False)
-        self.bn2 = nn.BatchNorm2d(interChannels)
-        self.conv2 = nn.Conv2d(interChannels, growthRate, kernel_size=3,
-                               padding=1, bias=False)
-
+        zip_channels = self.expansion * growth_rate
+        self.features = nn.Sequential(
+            nn.BatchNorm2d(in_channels),
+            nn.ReLU(True),
+            nn.Conv2d(in_channels, zip_channels, kernel_size=1, bias=False),
+            nn.BatchNorm2d(zip_channels),
+            nn.ReLU(True),
+            nn.Conv2d(zip_channels, growth_rate, kernel_size=3, padding=1, bias=False)
+        )
+        
     def forward(self, x):
-        out = self.conv1(F.relu(self.bn1(x)))
-        out = self.conv2(F.relu(self.bn2(out)))
-        out = torch.cat((x, out), 1)
-        return out
-
-class SingleLayer(nn.Module):
-    def __init__(self, nChannels, growthRate):
-        super(SingleLayer, self).__init__()
-        self.bn1 = nn.BatchNorm2d(nChannels)
-        self.conv1 = nn.Conv2d(nChannels, growthRate, kernel_size=3,
-                               padding=1, bias=False)
-
-    def forward(self, x):
-        out = self.conv1(F.relu(self.bn1(x)))
-        out = torch.cat((x, out), 1)
-        return out
-
+        out = self.features(x)
+        out = torch.cat([out, x], 1)
+        return out  
+    
 class Transition(nn.Module):
-    def __init__(self, nChannels, nOutChannels):
+    """
+    改变维数的Transition层
+    先通过1x1的卷积层减少channels，再通过2x2的平均池化层缩小feature-map
+    """
+    def __init__(self, in_channels, out_channels):
         super(Transition, self).__init__()
-        self.bn1 = nn.BatchNorm2d(nChannels)
-        self.conv1 = nn.Conv2d(nChannels, nOutChannels, kernel_size=1,
-                               bias=False)
-
+        self.features = nn.Sequential(
+            nn.BatchNorm2d(in_channels),
+            nn.ReLU(True),
+            nn.Conv2d(in_channels, out_channels, kernel_size=1, bias=False),
+            nn.AvgPool2d(2)
+        )
+        
     def forward(self, x):
-        out = self.conv1(F.relu(self.bn1(x)))
-        out = F.avg_pool2d(out, 2)
+        out = self.features(x)
         return out
-
-
+    
 class DenseNet(nn.Module):
-    def __init__(self, growthRate, depth, reduction, nClasses, bottleneck):
+    """
+    Dense Net
+    paper中growth_rate取12，维度压缩的参数θ，即reduction取0.5
+    且初始化方法为kaiming_normal()
+    num_blocks为每段网络中的DenseBlock数量
+    DenseNet和ResNet一样也是六段式网络（一段卷积+四段Dense+平均池化层），最后FC层。
+    第一段将维数从3变到2 * growth_rate
+    
+    (3, 32, 32) -> [Conv2d] -> (24, 32, 32) -> [layer1] -> (48, 16, 16) -> [layer2]
+  ->(96, 8, 8) -> [layer3] -> (192, 4, 4) -> [layer4] -> (384, 4, 4) -> [AvgPool]
+  ->(384, 1, 1) -> [Linear] -> (10)
+    
+    """
+    def __init__(self, num_blocks, growth_rate=12, reduction=0.5, num_classes=10):
         super(DenseNet, self).__init__()
-
-        nDenseBlocks = (depth-4) // 3
-        if bottleneck:
-            nDenseBlocks //= 2
-
-        nChannels = 2*growthRate
-        self.conv1 = nn.Conv2d(3, nChannels, kernel_size=3, padding=1,
-                               bias=False)
-        self.dense1 = self._make_dense(nChannels, growthRate, nDenseBlocks, bottleneck)
-        nChannels += nDenseBlocks*growthRate
-        nOutChannels = int(math.floor(nChannels*reduction))
-        self.trans1 = Transition(nChannels, nOutChannels)
-
-        nChannels = nOutChannels
-        self.dense2 = self._make_dense(nChannels, growthRate, nDenseBlocks, bottleneck)
-        nChannels += nDenseBlocks*growthRate
-        nOutChannels = int(math.floor(nChannels*reduction))
-        self.trans2 = Transition(nChannels, nOutChannels)
-
-        nChannels = nOutChannels
-        self.dense3 = self._make_dense(nChannels, growthRate, nDenseBlocks, bottleneck)
-        nChannels += nDenseBlocks*growthRate
-
-        self.bn1 = nn.BatchNorm2d(nChannels)
-        self.fc = nn.Linear(nChannels, nClasses)
-
+        self.growth_rate = growth_rate
+        self.reduction = reduction
+        
+        num_channels = 2 * growth_rate
+        
+        self.features = nn.Conv2d(3, num_channels, kernel_size=3, padding=1, bias=False)
+        self.layer1, num_channels = self._make_dense_layer(num_channels, num_blocks[0])
+        self.layer2, num_channels = self._make_dense_layer(num_channels, num_blocks[1])
+        self.layer3, num_channels = self._make_dense_layer(num_channels, num_blocks[2])
+        self.layer4, num_channels = self._make_dense_layer(num_channels, num_blocks[3], transition=False)
+        self.avg_pool = nn.Sequential(
+            nn.BatchNorm2d(num_channels),
+            nn.ReLU(True),
+            nn.AvgPool2d(4),
+        )
+        self.classifier = nn.Linear(num_channels, num_classes)
+        
+        self._initialize_weight()
+        
+    def _make_dense_layer(self, in_channels, nblock, transition=True):
+        layers = []
+        for i in range(nblock):
+            layers += [Bottleneck(in_channels, self.growth_rate)]
+            in_channels += self.growth_rate
+        out_channels = in_channels
+        if transition:
+            out_channels = int(math.floor(in_channels * self.reduction))
+            layers += [Transition(in_channels, out_channels)]
+        return nn.Sequential(*layers), out_channels
+    
+    def _initialize_weight(self):
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
-                n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
-                m.weight.data.normal_(0, math.sqrt(2. / n))
-            elif isinstance(m, nn.BatchNorm2d):
-                m.weight.data.fill_(1)
-                m.bias.data.zero_()
-            elif isinstance(m, nn.Linear):
-                m.bias.data.zero_()
-
-    def _make_dense(self, nChannels, growthRate, nDenseBlocks, bottleneck):
-        layers = []
-        for i in range(int(nDenseBlocks)):
-            if bottleneck:
-                layers.append(Bottleneck(nChannels, growthRate))
-            else:
-                layers.append(SingleLayer(nChannels, growthRate))
-            nChannels += growthRate
-        return nn.Sequential(*layers)
-
+                nn.init.kaiming_normal_(m.weight.data)
+                if m.bias is not None:
+                    m.bias.data.zero_()
+    
     def forward(self, x):
-        out = self.conv1(x)
-        out = self.trans1(self.dense1(out))
-        out = self.trans2(self.dense2(out))
-        out = self.dense3(out)
-        out = torch.squeeze(F.avg_pool2d(F.relu(self.bn1(out)), 8))
-        out = F.log_softmax(self.fc(out))
+        out = self.features(x)
+        out = self.layer1(out)
+        out = self.layer2(out)
+        out = self.layer3(out)
+        out = self.layer4(out)
+        out = self.avg_pool(out)
+        out = out.view(out.size(0), -1)
+        out = self.classifier(out)
         return out
-
-
-# def densenet_BC_cifar(depth, k, **kwargs):
-#     N = (depth - 4) // 6
-#     model = DenseNet(growth_rate=k, block_config=[N, N, N], num_init_features=2*k, **kwargs)
-#     return model
 
 # 直接设置好默认的分类类别有10类
 # net = DenseNet().to(device)
 # net = densenet_BC_cifar(190, 40, num_classes=100).to(device)
-net = DenseNet(growthRate=12, depth=100, reduction=0.5, bottleneck=True, nClasses=10).to(device)
+net = DenseNet([6,12,24,16], growth_rate=32).to(device)
 with open('Log/DenseNet.txt', 'w') as f:
     f.write(str(net))
 criterion = nn.CrossEntropyLoss()
@@ -197,7 +196,7 @@ if __name__ == '__main__':
     print('Using PyTorch version:', torch.__version__, ' Device:', device)
     print(net)
 
-    epochs = 10
+    epochs = 20
     lossv, accv = [], []
     # print("hello")
     for epoch in range(1, epochs + 1):
