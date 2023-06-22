@@ -66,14 +66,12 @@ class MyLSTM(nn.Module):
         #input
         self.ii = nn.Linear(input_size, hidden_size)
         self.hi = nn.Linear(hidden_size, hidden_size)
-
         #forget gate
         self.i2f = nn.Linear(input_size, hidden_size)
         self.hf = nn.Linear(hidden_size, hidden_size)
         #cell
         self.ig = nn.Linear(input_size, hidden_size)
         self.hg = nn.Linear(hidden_size, hidden_size)
-
         #output gate
         self.io = nn.Linear(input_size, hidden_size)
         self.ho = nn.Linear(hidden_size, hidden_size)
@@ -83,29 +81,25 @@ class MyLSTM(nn.Module):
     def forward(self, x, h0_c0=None):
         B, L, _=x.shape
         hidden_seq=[]
-
         if h0_c0 is None:
             h_t1 = torch.zeros(B,self.hidden_size).to(x.device)
             c_t1 = torch.zeros(B,self.hidden_size).to(x.device)
         else:
             h_t1, c_t1 = h0_c0
-
         for t in range(L):
             x_t = x[:, t, :]  #current input
-
         i_t = torch.sigmoid(self.ii(x_t) + self.hi(h_t1))
         f_t = torch.sigmoid(self.i2f(x_t) + self.hf(h_t1))
         g_t = torch.tanh(self.ig(x_t) + self.hg(h_t1))
         o_t = torch.sigmoid(self.io(x_t) + self.ho(h_t1))
         c_t1 = f_t * c_t1 + i_t * g_t
         h_t1 = o_t * torch.tanh(c_t1)
-
         hidden_seq.append(h_t1.unsqueeze(0))
         hidden_seq = torch.cat(hidden_seq, dim=0)
         hidden_seq = hidden_seq.transpose(0, 1)
         h_t1 = self.softmax(self.output_proj(h_t1))
         return hidden_seq, (h_t1, c_t1)
-  
+
 def timeSince(since):
     now = time.time()
     s = now - since
