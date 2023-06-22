@@ -57,6 +57,55 @@ class LSTM(nn.Module):
         out = self.softmax(out)
         return out
 
+class MyLSTM(nn.Module):
+    def __init__(self,input_size, hidden_size, proj_size):
+        super().__init__()
+        self.input_size = input_size
+        self.hidden_size= hidden_size
+
+        #input
+        self.ii = nn.Linear(input_size, hidden_size)
+        self.hi = nn.Linear(hidden_size, hidden_size)
+
+        #forget gate
+        self.i2f = nn.Linear(input_size, hidden_size)
+        self.hf = nn.Linear(hidden_size, hidden_size)
+        #cell
+        self.ig = nn.Linear(input_size, hidden_size)
+        self.hg = nn.Linear(hidden_size, hidden_size)
+
+        #output gate
+        self.io = nn.Linear(input_size, hidden_size)
+        self.ho = nn.Linear(hidden_size, hidden_size)
+        self.output_proj = nn.Linear(hidden_size, proj_size)
+        self.softmax = nn.LogSoftmax(dim=1)
+        
+    def forward(self, x, h0_c0=None):
+        B, L, _=x.shape
+        hidden_seq=[]
+
+        if h0_c0 is None:
+            h_t1 = torch.zeros(B,self.hidden_size).to(x.device)
+            c_t1 = torch.zeros(B,self.hidden_size).to(x.device)
+        else:
+            h_t1, c_t1 = h0_c0
+
+        for t in range(L):
+            x_t = x[:, t, :]  #current input
+
+        i_t = torch.sigmoid(self.ii(x_t) + self.hi(h_t1))
+        f_t = torch.sigmoid(self.i2f(x_t) + self.hf(h_t1))
+        g_t = torch.tanh(self.ig(x_t) + self.hg(h_t1))
+        o_t = torch.sigmoid(self.io(x_t) + self.ho(h_t1))
+        c_t1 = f_t * c_t1 + i_t * g_t
+        h_t1 = o_t * torch.tanh(c_t1)
+
+        hidden_seq.append(h_t1.unsqueeze(0))
+        hidden_seq = torch.cat(hidden_seq, dim=0)
+        hidden_seq = hidden_seq.transpose(0, 1)
+        h_t1 = self.softmax(self.output_proj(h_t1))
+        return hidden_seq, (h_t1, c_t1)
+  
 def timeSince(since):
     now = time.time()
     s = now - since
@@ -146,21 +195,21 @@ def randomTrainingExample():
     return category, line, category_tensor, line_tensor
 
 def train(args, category_tensor, line_tensor):
-    hidden = rnn.initHidden()
-    
-    rnn.zero_grad()
-    print(line_tensor.shape)
-    for i in range(line_tensor.size()[0]):
-        output, hidden = rnn(line_tensor[i], hidden)
-    # optimizer.zero_grad()
-    # output = rnn(line_tensor)
+    # hidden = rnn.initHidden()
+    #
+    # rnn.zero_grad()
+    # print(line_tensor.shape)
+    # for i in range(line_tensor.size()[0]):
+    #     output, hidden = rnn(line_tensor[i], hidden)
+    optimizer.zero_grad()
+    output = rnn(line_tensor)
     loss = criterion(output, category_tensor)
     loss.backward()
-    # optimizer.step()
+    optimizer.step()
 
     # Add parameters' gradients to their values, multiplied by learning rate
-    for p in rnn.parameters():
-        p.data.add_(p.grad.data, alpha=-args.learning_rate)
+    # for p in rnn.parameters():
+    #     p.data.add_(p.grad.data, alpha=-args.learning_rate)
 
     return output, loss.item()
 
@@ -218,9 +267,11 @@ if __name__ == '__main__':
 
     criterion = nn.NLLLoss()
 
-    rnn = RNN(n_letters, args.hidden, n_categories)
-    # rnn = LSTM(n_letters, args.hidden, n_categories)#.to(args.device)
+    # rnn = RNN(n_letters, args.hidden, n_categories)
+    rnn = LSTM(n_letters, args.hidden, n_categories)#.to(args.device)
+    # rnn = MyLSTM(n_letters, args.hidden, n_categories)#.to(args.device)
     optimizer = torch.optim.SGD(rnn.parameters(), lr=args.learning_rate)
+    print(rnn)
 
     current_loss = 0
     all_losses = []
