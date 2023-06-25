@@ -130,22 +130,23 @@ if __name__ == "__main__":
     plt.figure(figsize=(5, 3))
     plt.plot(np.arange(1, args.epochs+1), loss2)
     plt.savefig('lossV')
-    count = 0
+    count = 30
     for x_gen in collect_x_gen:
         count = show_imgs(x_gen, count=count)
 
     fixed_noise = torch.randn(8, 100, device=args.device)
     fixed_noise = fixed_noise.repeat(5, 1)
     for i in range(0, 8):
-        fixed_noise[i][0] = 3
+        fixed_noise[i][0] = 10
     for i in range(8, 16):
-        fixed_noise[i][20] = 3
+        fixed_noise[i][20] = 10
     for i in range(16, 24):
-        fixed_noise[i][40] = 3
+        fixed_noise[i][40] = 10
     for i in range(24, 32):
-        fixed_noise[i][60] = 3
+        fixed_noise[i][60] = 10
     for i in range(32, 40):
-        fixed_noise[i][80] = 3
+        fixed_noise[i][80] = 10
 
     x_gen = G(fixed_noise)
     count = show_imgs(x_gen, new_fig=False, count=count)
+    # plt.savefig('generated.png')
